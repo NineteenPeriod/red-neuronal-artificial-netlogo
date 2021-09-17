@@ -1,0 +1,340 @@
+extensions [matrix array]
+
+;; CREACION DE VARIABLES GLOBALES QUE SERAN USADAS A TRAVES DE TODO EL PROGRAMA
+globals[ a b i matriz_poblacion tabla_xor tabla_xor2 salida-esperada nodo-de-entrada-1 nodo-de-entrada-2 nodo-de-salida-1 conexiones index matriz-de-poblacion generaciones columna-error error-cuadrado-medio error-generacion]
+
+;; CREACION DE LOS TIPOS DE TORTUGAS
+breed [ nodos-de-entrada nodo-de-entrada ]
+breed [ nodos-de-salida nodo-de-salida ]
+breed [ nodos-capa-oculta nodo-capa-oculta ]
+
+;; ASIGNACION DE LOS ATRIBUTOS ESTIMULO Y ERROR DE SALIDA A LAS TORTUGAS
+turtles-own [ estimulo error-de-salida ]
+
+;; ASIGNACION DEL ATRIBUTO PESO A LAS TORTUGAS QUE ACTUARAN COMO ENLACES
+links-own [ peso ]
+
+;; ESTE METODO CREA LA RED Y LA MATRIZ DE INDIVIDUOS Y LE ASIGNA UNA COLUMNA EXTRA A LA MATRIZ QUE SERVIRA PARA ALMACENAR SU APTITUD
+to preparar
+  clear-all
+  reset-ticks
+  ask patches [ set pcolor grey ]
+  set-default-shape nodos-de-entrada "capa_de_entrada"
+  set-default-shape nodos-de-salida "capa_de_salida"
+  set-default-shape nodos-capa-oculta "capa_oculta"
+  set-default-shape links "default"
+  ;; SE DIBUJAN LOS NODOS SOBRE EL MUNDO Y SE LES ASIGNA UNA VARIABLE GLOBAL QUE LOS IDENTIFICARA PARA PODER UTILIZAR SUS VALORES MAS ADELANTE
+  create-nodos-de-entrada 1 [
+    setxy -13 -2
+    set nodo-de-entrada-1 self
+    set size 2
+  ]
+  create-nodos-de-entrada 1 [
+    setxy -13 2
+    set nodo-de-entrada-2 self
+    set size 2
+  ]
+  ask nodos-de-entrada [ set estimulo random 2 ]
+  create-nodos-capa-oculta 1 [ setxy 0 -14 ]
+  create-nodos-capa-oculta 1 [ setxy 0 -7  ]
+  create-nodos-capa-oculta 1 [ setxy 0  0  ]
+  create-nodos-capa-oculta 1 [ setxy 0  7  ]
+  create-nodos-capa-oculta 1 [ setxy 0  14 ]
+  ask nodos-capa-oculta [
+    set estimulo random 2
+    set size 2
+  ]
+  create-nodos-de-salida 1 [
+    setxy 13 0
+    set nodo-de-salida-1 self
+    set estimulo random 2
+    set size 2
+  ]
+  ;; PARA SABER EL NUMERO DE CONEXIONES ENTRE NEURONAS CONTAMOS LOS NODOS DE LA CAPA OCULTA Y APLICAMOS LA FORMULA
+  set conexiones count turtles with [breed = nodos-capa-oculta]
+  set conexiones 2 * conexiones + 1 * conexiones
+  ;; CREAMOS TRES ARREGLOS QUE CONTIENEN LA TABLA XOR QUE SERVIRA PARA ENTRENAR LA MATRIZ
+  set tabla_xor (list 0 1 0 1)
+  set tabla_xor2 (list 0 0 1 1)
+  set salida-esperada (list 0 1 1 0)
+
+  set a -1
+  set b 1
+  let precision_val 100
+
+  let cromosoma calc_crom a b precision_val
+  set error-generacion 0
+  print ""
+  print "Numero de conexiones:"
+  print conexiones
+
+  let conexionesmasuno conexiones + 1
+  set matriz-de-poblacion matrix:from-row-list n-values tamaÃ±o_pob [n-values conexionesmasuno [ -> random 2]]
+
+  set index 0
+  while[index < tamaÃ±o_pob]
+  [
+    let matriz matrix:from-row-list n-values conexiones [n-values cromosoma [ -> random 2]]
+    let cromosoma_binario-a-decimaldo binario-a-decimal matriz conexiones cromosoma
+    let valores_aproximados rango cromosoma_binario-a-decimaldo conexiones
+    set columna-error array:to-list valores_aproximados
+    set cromosoma_binario-a-decimaldo array:to-list cromosoma_binario-a-decimaldo
+    let resultado 0
+    set columna-error insert-item conexiones columna-error resultado
+
+    matrix:set-row matriz-de-poblacion index columna-error
+    set index index + 1
+  ]
+
+  crear-enlaces
+  feed-forward
+  
+  set matriz_poblacion matriz-de-poblacion
+  print matrix:pretty-print-text matriz_poblacion
+  set index 0
+end
+
+to crear-enlaces
+  set i 0
+  ask nodos-de-entrada [
+    create-links-to nodos-capa-oculta [
+      set peso item i columna-error
+      set i i + 1
+    ]
+  ]
+  set i 0
+  ask nodos-capa-oculta [
+    create-links-to nodos-de-salida [
+      set peso item i columna-error
+      set i i + 1
+    ]
+  ]
+end
+
+to feed-forward
+  ask nodos-capa-oculta [ set estimulo 1 / (1 + e ^ (- sum [ [ estimulo ] of end1 * peso ] of my-in-links) ) ]
+  ask nodos-de-salida [ set estimulo  1 / (1 + e ^ (- sum [ [ estimulo ] of end1 * peso ] of my-in-links))  ]
+  ask turtles [ set color [ 0 0 255 255 ] ]
+  ask links [
+    set label precision peso 3
+    set color [ 255 255 255 196 ]
+  ]
+end
+
+to-report rango [arreglo-valores tamaÃ±o_poblacion]
+  let lista array:to-list arreglo-valores
+  let maximo max lista
+  let minimo min lista
+  set i 0
+  let k 0
+  let tamaÃ±o_arreglo array:length arreglo-valores
+  set tamaÃ±o_arreglo tamaÃ±o_arreglo - 1
+  let arreglo_rango array:from-list n-values tamaÃ±o_poblacion [0]
+
+  while[i <= tamaÃ±o_arreglo]
+  [
+    set k array:item arreglo-valores i
+    let aproximacion1 (k - minimo) * (b - a)
+    let aproximacion2  (aproximacion1) / (maximo - minimo)
+    let aproximacion3 (aproximacion2) + a
+    array:set arreglo_rango i aproximacion3
+    set i i + 1
+  ]
+  report arreglo_rango
+end
+
+to-report ordenar-matriz [ key lst ]
+  report sort-by [ [x y] -> (runresult key x) < (runresult key y) ] lst
+end
+
+to-report calc_crom [v1 v2 pc]
+  let resultado abs v2 - v1
+  set resultado resultado * pc
+  set resultado ln resultado
+  set resultado (resultado)/(ln 2)
+  report round resultado
+end
+
+to-report binario-a-decimal [matriz-pob tamaÃ±o_poblacion tamaÃ±o-crom]
+  set i 0
+  let j tamaÃ±o-crom - 1
+  let k 0
+  let auxiliar 0
+  let arreglo array:from-list n-values tamaÃ±o_poblacion [0]
+  let suma 0
+
+  while[i <= tamaÃ±o_poblacion - 1]
+  [
+    while[j >= 0]
+    [
+      set auxiliar matrix:get matriz-pob i j
+      set auxiliar auxiliar * 2 ^ k
+      set j j - 1
+      set k k + 1
+      set suma suma + auxiliar
+    ]
+    array:set arreglo i suma
+    set j tamaÃ±o-crom - 1
+    set i i + 1
+    set k 0
+    set suma 0
+  ]
+  report arreglo
+end
+
+to evolucionar
+  let m 0
+  while [m < num_gen]
+  [ 
+    set matriz_poblacion apareamiento matriz_poblacion ;; apareamos los individuos de la matriz de poblacion actual
+
+    let resultado matrix:dimensions matriz_poblacion
+    set resultado item 0 resultado
+    let resultadoDos resultado + 1
+    let cromosomas-a-mutar conexiones + 1
+    let n random resultadoDos
+    let valoresultadoR random cromosomas-a-mutar
+
+    let matriz-poblacion matrix:to-column-list matriz_poblacion
+    set matriz-poblacion matrix:from-column-list remove-item conexiones matriz-poblacion
+    
+    if n != 0 AND valoresultadoR != 0
+    [
+      set matriz_poblacion mutar matriz-poblacion resultado n conexiones valoresultadoR
+      set index 0
+      while[index < tamaÃ±o_pob]
+      [
+        let index2 0
+        set columna-error matrix:get-row matriz_poblacion index
+        clear-links
+        crear-enlaces
+        let contador 0
+        set error-cuadrado-medio array:from-list n-values 4 [0]
+
+        while [contador < 4]
+        [
+          ask nodo-de-entrada-1 [ set estimulo item contador tabla_xor ]
+          ask nodo-de-entrada-2 [ set estimulo item contador tabla_xor2 ]
+          feed-forward
+          let salida-esperada-arreglo item contador salida-esperada
+
+          ask nodo-de-salida-1 [
+            set error-de-salida (salida-esperada-arreglo - estimulo)
+            set resultado error-de-salida ^ 2
+            array:set error-cuadrado-medio contador resultado
+          ]
+          set contador contador + 1
+        ]
+        
+        set error-cuadrado-medio array:to-list error-cuadrado-medio
+        set resultado sum error-cuadrado-medio
+        set resultado resultado / 4
+        set error-generacion resultado
+
+        set columna-error insert-item conexiones columna-error resultado
+        matrix:set-row matriz-de-poblacion index columna-error
+        set index index + 1
+      ]
+      set matriz-de-poblacion ordenar-matriz [ l -> item conexiones l ] matrix:to-row-list matriz-de-poblacion
+      set matriz-de-poblacion matrix:from-row-list matriz-de-poblacion
+      
+      print ""
+      print matrix:pretty-print-text matriz-de-poblacion
+      set error-generacion matrix:get matriz-de-poblacion 0 conexiones
+      set matriz_poblacion matriz-de-poblacion
+      
+      set columna-error matrix:get-row matriz-de-poblacion 0
+      clear-links
+      crear-enlaces
+      feed-forward
+    ]
+    set generaciones generaciones + 1
+    set m m + 1
+  ]
+end
+
+to-report apareamiento [matriz-a-aparear]
+  let j 0
+  let cont 0
+  set i 0
+  let k 0
+  set j tamaÃ±o_pob / 2
+  set j j - 1
+  let indivuo conexiones / 2
+  set indivuo round indivuo
+  set k tamaÃ±o_pob / 2
+
+  while[i < j]
+    [
+      while[cont < indivuo]
+      [
+        matrix:set matriz-a-aparear k cont matrix:get matriz-a-aparear i cont
+        matrix:set matriz-a-aparear k + 1 cont matrix:get matriz-a-aparear j cont
+        set cont cont + 1
+      ]
+      set cont 0
+      set indivuo conexiones / 2
+      set indivuo round indivuo
+      set indivuo indivuo
+      while[indivuo < conexiones]
+      [
+        matrix:set matriz-a-aparear k + 1 indivuo matrix:get matriz-a-aparear i indivuo
+        matrix:set matriz-a-aparear k indivuo matrix:get matriz-a-aparear j indivuo
+        set indivuo indivuo + 1
+      ]
+      set cont 0
+      set i i + 1
+      set j j - 1
+      set k k + 2
+      set indivuo conexiones / 2
+      set indivuo round indivuo
+    ]
+  report matriz-a-aparear
+end
+
+to-report mutar [poblacion-que-mutara tamaÃ±o-pob-mutar cuantos-mutaran tamaÃ±o-de-genes cuantos-genes-mutaran]
+  set i 0
+  let j 0
+  let valoresultado 0
+  let k range tamaÃ±o-pob-mutar
+  set k shuffle k
+  let lista n-of cuantos-mutaran k
+  let rango-de-cromosomas range tamaÃ±o-de-genes
+  set rango-de-cromosomas shuffle rango-de-cromosomas
+  set lista array:from-list lista
+  while[i < cuantos-mutaran]
+  [
+    let rango-cromosomas-mezclados n-of cuantos-genes-mutaran rango-de-cromosomas
+    set rango-cromosomas-mezclados shuffle rango-cromosomas-mezclados
+    set rango-cromosomas-mezclados array:from-list rango-cromosomas-mezclados
+    let auxiliar matrix:get-row poblacion-que-mutara array:item lista i
+    while[j < cuantos-genes-mutaran]
+    [
+      ifelse item array:item rango-cromosomas-mezclados j auxiliar > 0
+      [ set auxiliar replace-item array:item rango-cromosomas-mezclados j auxiliar random-float 10 ] [ set auxiliar replace-item array:item rango-cromosomas-mezclados j auxiliar random-float -10 ]
+      set j j + 1
+    ]
+    matrix:set-row poblacion-que-mutara array:item lista i auxiliar
+    set i i + 1
+    set j 0
+  ]
+  report poblacion-que-mutara
+end
+
+to probar
+  let contador 0
+  set error-cuadrado-medio array:from-list n-values 4 [0]
+  while [contador < 4]
+  [
+    ask nodo-de-entrada-1 [ set estimulo item contador tabla_xor ]
+    ask nodo-de-entrada-2 [ set estimulo item contador tabla_xor2 ]
+    feed-forward
+    let salida-esperada-arreglo item contador salida-esperada
+    print (word "La respuesta para " item contador tabla_xor " XOR " item contador tabla_xor2 " es:" salida-esperada-arreglo )
+    let salida-real [ estimulo ] of one-of nodos-de-salida
+    let correcto 0
+    ifelse salida-real < 0.5 [ set correcto 0 ] [ set correcto 1 ]
+    print (word "La red reporto: " salida-real " o (" correcto ")")
+    set contador contador + 1
+  ]
+end
